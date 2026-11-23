@@ -79,6 +79,32 @@ jobs:
           if (-not (Test-Path "Registry::HKEY_CLASSES_ROOT\fortilinkremoto")) { throw "o link fortilinkremoto:// não foi registrado" }
           Write-Host "link fortilinkremoto:// registrado"
           Get-ChildItem "$env:PUBLIC\Desktop", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter "*orti*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "atalho: $($_.FullName)" }
+      - name: Importar e exportar a lista de computadores
+        shell: pwsh
+        run: |
+          $senha = 1..32
+          $lista = @{ formato = "fortilink-remoto-lista"; versao = 1; favoritos = @("111222333"); computadores = @(
+            @{ id = "111222333"; senha = $senha; apelido = "Condomínio Teste – Portaria 1"; usuario = "portaria"; computador = "PC-PORTARIA"; sistema = "Windows" },
+            @{ id = "444555666"; senha = @(); apelido = "Loteamento Fechado Estância do Bosque"; usuario = ""; computador = ""; sistema = "" },
+            @{ id = "..\..\fora"; senha = $senha; apelido = "inválido"; usuario = ""; computador = ""; sistema = "" }) }
+          $ent = "$env:TEMP\entrada.fortilink"; $sai = "$env:TEMP\saida.fortilink"
+          [IO.File]::WriteAllText($ent, ($lista | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
+          $r = (& $env:INST --fl-import-peers $ent | Out-String).Trim(); Write-Host "importar: $r"
+          if ($r -ne "ok:2") { throw "a importação deveria aceitar 2 computadores e recusar o inválido" }
+          $pasta = "$env:APPDATA\FortiLinkRemoto\config\peers"
+          if (-not (Test-Path "$pasta\111222333.toml")) { Get-ChildItem "$env:APPDATA\FortiLinkRemoto" -Recurse | ForEach-Object { Write-Host $_.FullName }; throw "o computador importado não foi guardado" }
+          if ((Get-Content "$pasta\111222333.toml" -Raw) -match '1,\s*2,\s*3,\s*4,\s*5') { throw "a senha ficou guardada sem proteção no arquivo do computador" }
+          $r = (& $env:INST --fl-export-peers $sai | Out-String).Trim(); Write-Host "exportar: $r"
+          if ($r -ne "ok:2") { throw "a exportação deveria trazer 2 computadores" }
+          $d = Get-Content $sai -Raw -Encoding UTF8 | ConvertFrom-Json
+          $a = $d.computadores | Where-Object id -eq "111222333"
+          if ($a.apelido -ne "Condomínio Teste – Portaria 1") { throw "o nome do condomínio não voltou igual ($($a.apelido))" }
+          if (($a.senha -join ",") -ne ($senha -join ",")) { throw "a senha não voltou igual" }
+          if ($d.favoritos -notcontains "111222333") { throw "o favorito não voltou" }
+          $r = (& $env:INST --fl-import-peers "$env:WINDIR\win.ini" | Out-String).Trim(); Write-Host "arquivo errado: $r"
+          if ($r -notlike "erro:*") { throw "arquivo que não é lista deveria ser recusado" }
+          Remove-Item $ent, $sai -Force
+          Write-Host "Lista: importar, guardar protegido, exportar e recusar arquivo errado - tudo certo."
       - name: Instalar por cima (atualização) mantém a configuração
         shell: pwsh
         run: |
@@ -102,7 +128,7 @@ jobs:
           $progs = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' | ForEach-Object { (Get-ItemProperty $_.PSPath).DisplayName } | Where-Object { $_ -like 'FortiLink*' -or $_ -like 'RustDesk*' }
           foreach ($x in $progs) { $sobrou += "programa instalado: $x" }
           netsh advfirewall firewall show rule name="FortiLinkRemoto Service" | Out-Null; if ($LASTEXITCODE -eq 0) { $sobrou += "regra do firewall" }
-          foreach ($d in @("$env:APPDATA\FortiLinkRemoto", "C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\FortiLinkRemoto")) { if (Test-Path $d) { Write-Host "AVISO: ficou a pasta de dados $d" } }
+          foreach ($d in @("$env:APPDATA\FortiLinkRemoto", "C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\FortiLinkRemoto")) { if (Test-Path $d) { $sobrou += "pasta de dados $d"; Get-ChildItem $d -Recurse -ErrorAction SilentlyContinue | Select-Object -First 15 | ForEach-Object { Write-Host "   ficou: $($_.FullName)" } } }
           if ($sobrou.Count) { $sobrou | ForEach-Object { Write-Host "SOBROU: $_" }; throw "a desinstalação deixou coisas no computador" }
-          Write-Host "Desinstalação: programa, serviço, link e firewall removidos."
+          Write-Host "Desinstalação: programa, serviço, link, firewall e pastas de dados removidos."
           exit 0
