@@ -2,9 +2,11 @@ name: Conferir instalador (Windows limpo)
 
 # Testa um instalador já gerado, sem compilar de novo: instalar, configurar, instalar por cima e desinstalar.
 on:
-  push:
-    branches: [construcao]
-    paths: [".github/workflows/conferir.yml"]
+  workflow_call:
+    inputs:
+      geracao:
+        type: string
+        required: false
   workflow_dispatch:
     inputs:
       geracao:
@@ -16,7 +18,7 @@ permissions:
   actions: read
 
 env:
-  GERACAO: ${{ inputs.geracao || '45261671842' }}
+  GERACAO: ${{ inputs.geracao || github.run_id }}
   VERSAO: "1.5.3"
 
 jobs:
@@ -37,7 +39,7 @@ jobs:
           $v = (Get-Item $exe).VersionInfo
           Write-Host "Produto: $($v.ProductName) | Descrição: $($v.FileDescription) | Tamanho: $([math]::Round((Get-Item $exe).Length/1MB,1)) MB"
           Get-Content ./saida/sha256.txt
-          if ($v.ProductName -ne "FortiLink Remoto") { throw "o nome do produto não é FortiLink Remoto" }
+          if ($v.ProductName -ne "FortiLink Remoto" -or $v.FileDescription -ne "FortiLink Remoto") { throw "nome do produto ou descrição não é FortiLink Remoto" }
           "EXE=$exe" | Out-File -Append $env:GITHUB_ENV
       - name: Instalar em silêncio
         shell: pwsh

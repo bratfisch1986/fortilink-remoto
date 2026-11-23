@@ -48,6 +48,7 @@ else:
 trocar("Cargo.toml", 'ProductName = "RustDesk"', f'ProductName = "{NOME_VISIVEL}"')
 trocar("Cargo.toml", 'FileDescription = "RustDesk Remote Desktop"', f'FileDescription = "{NOME_VISIVEL}"')
 trocar("libs/portable/Cargo.toml", 'ProductName = "RustDesk"', f'ProductName = "{NOME_VISIVEL}"')
+trocar("libs/portable/Cargo.toml", 'FileDescription = "RustDesk Remote Desktop"', f'FileDescription = "{NOME_VISIVEL}"')
 rc = "flutter/windows/runner/Runner.rc"
 trocar(rc, 'VALUE "FileDescription", "RustDesk Remote Desktop"', f'VALUE "FileDescription", "{NOME_VISIVEL}"')
 trocar(rc, 'VALUE "ProductName", "RustDesk"', f'VALUE "ProductName", "{NOME_VISIVEL}"')
