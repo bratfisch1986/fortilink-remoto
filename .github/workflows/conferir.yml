@@ -1,0 +1,106 @@
+name: Conferir instalador (Windows limpo)
+
+# Testa um instalador já gerado, sem compilar de novo: instalar, configurar, instalar por cima e desinstalar.
+on:
+  push:
+    branches: [construcao]
+    paths: [".github/workflows/conferir.yml"]
+  workflow_dispatch:
+    inputs:
+      geracao:
+        description: "Número da geração (run) que tem o instalador"
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  GERACAO: ${{ inputs.geracao || '45261671842' }}
+  VERSAO: "1.5.3"
+
+jobs:
+  conferir:
+    name: Teste em Windows limpo
+    runs-on: windows-2022
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: FortiLinkRemoto-windows
+          path: ./saida
+          run-id: ${{ env.GERACAO }}
+          github-token: ${{ github.token }}
+      - name: Marca gravada no arquivo
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem ./saida -Filter "FortiLinkRemoto-*.exe" | Select-Object -First 1).FullName
+          $v = (Get-Item $exe).VersionInfo
+          Write-Host "Produto: $($v.ProductName) | Descrição: $($v.FileDescription) | Tamanho: $([math]::Round((Get-Item $exe).Length/1MB,1)) MB"
+          Get-Content ./saida/sha256.txt
+          if ($v.ProductName -ne "FortiLink Remoto") { throw "o nome do produto não é FortiLink Remoto" }
+          "EXE=$exe" | Out-File -Append $env:GITHUB_ENV
+      - name: Instalar em silêncio
+        shell: pwsh
+        run: |
+          $ini = Get-Date
+          Start-Process $env:EXE -ArgumentList "--silent-install"
+          $fim = (Get-Date).AddMinutes(8); $svc = $null; $inst = "C:\Program Files\FortiLinkRemoto\FortiLinkRemoto.exe"
+          while ((Get-Date) -lt $fim) {
+            Start-Sleep 10
+            $svc = Get-Service FortiLinkRemoto -ErrorAction SilentlyContinue
+            if ($svc -and $svc.Status -eq 'Running' -and (Test-Path $inst)) { break }
+          }
+          Write-Host "tempo: $([int]((Get-Date)-$ini).TotalSeconds) s"
+          if (-not ($svc -and (Test-Path $inst))) {
+            Write-Host "===== processos"; Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'rustdesk|FortiLink|cmd|reg|netsh|sc\.exe|timeout|powershell|cscript|wscript|msiexec|rundll' } | ForEach-Object { Write-Host "$($_.ProcessId) [$($_.ParentProcessId)] $($_.Name) :: $($_.CommandLine)" }
+            Write-Host "===== serviços"; Get-Service | Where-Object { $_.Name -match 'ust|orti' } | Format-Table Name, Status
+            Write-Host "===== pastas"; foreach ($d in @("C:\Program Files\FortiLinkRemoto", "C:\Program Files\RustDesk", "$env:APPDATA\FortiLinkRemoto", "$env:APPDATA\RustDesk", "$env:LOCALAPPDATA\rustdesk", "$env:LOCALAPPDATA\FortiLinkRemoto", "$env:TEMP")) { if (Test-Path $d) { Write-Host "-- $d"; Get-ChildItem $d -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 60 | ForEach-Object { Write-Host "   $($_.FullName) ($($_.Length))" } } }
+            Write-Host "===== registros"; Get-ChildItem "$env:APPDATA\FortiLinkRemoto\log" -Recurse -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "-- $($_.FullName)"; Get-Content $_.FullName -Tail 60 }
+            Get-ChildItem $env:TEMP -Recurse -Include *.bat,*.cmd,*.vbs -ErrorAction SilentlyContinue | Select-Object -First 5 | ForEach-Object { Write-Host "-- $($_.FullName)"; Get-Content $_.FullName -TotalCount 80 }
+            throw "o FortiLink Remoto não ficou instalado em 8 minutos"
+          }
+          Write-Host "Serviço: $($svc.Name) ($($svc.Status))"
+          if (Get-Service RustDesk -ErrorAction SilentlyContinue) { throw "sobrou serviço com o nome RustDesk" }
+          "INST=$inst" | Out-File -Append $env:GITHUB_ENV
+      - name: Configurar e ler de volta
+        shell: pwsh
+        run: |
+          function Rodar([string[]]$a) { $o = & $env:INST @a | Out-String; return $o.Trim() }
+          Rodar @("--option","custom-rendezvous-server","acesso.teste.invalid") | Out-Null
+          Rodar @("--option","verification-method","use-permanent-password") | Out-Null
+          $srv = Rodar @("--option","custom-rendezvous-server"); Write-Host "servidor: $srv"
+          if ($srv -ne "acesso.teste.invalid") { throw "não guardou o servidor" }
+          $id = Rodar @("--get-id"); Write-Host "número: $id"
+          if ($id -notmatch '^\d{6,}$') { throw "não devolveu o número do computador" }
+          $ver = Rodar @("--version"); Write-Host "versão: $ver"
+          if ($ver -ne $env:VERSAO) { throw "versão inesperada" }
+          if (-not (Test-Path "Registry::HKEY_CLASSES_ROOT\fortilinkremoto")) { throw "o link fortilinkremoto:// não foi registrado" }
+          Write-Host "link fortilinkremoto:// registrado"
+          Get-ChildItem "$env:PUBLIC\Desktop", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter "*orti*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "atalho: $($_.FullName)" }
+      - name: Instalar por cima (atualização) mantém a configuração
+        shell: pwsh
+        run: |
+          Start-Process $env:EXE -ArgumentList "--silent-install"
+          Start-Sleep 90
+          $fim = (Get-Date).AddMinutes(5)
+          while ((Get-Date) -lt $fim -and (Get-Service FortiLinkRemoto -ErrorAction SilentlyContinue).Status -ne 'Running') { Start-Sleep 10 }
+          $srv = (& $env:INST --option custom-rendezvous-server | Out-String).Trim()
+          if ($srv -ne "acesso.teste.invalid") { throw "a instalação por cima perdeu a configuração ($srv)" }
+          Write-Host "Configuração mantida depois de instalar por cima."
+      - name: Desinstalar e conferir que não sobrou nada
+        shell: pwsh
+        run: |
+          Start-Process $env:INST -ArgumentList "--uninstall"
+          $fim = (Get-Date).AddMinutes(4)
+          while ((Get-Date) -lt $fim -and ((Get-Service FortiLinkRemoto -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files\FortiLinkRemoto"))) { Start-Sleep 10 }
+          $sobrou = @()
+          if (Get-Service FortiLinkRemoto -ErrorAction SilentlyContinue) { $sobrou += "serviço FortiLinkRemoto" }
+          if (Test-Path "C:\Program Files\FortiLinkRemoto") { $sobrou += "pasta do programa" }
+          if (Test-Path "Registry::HKEY_CLASSES_ROOT\fortilinkremoto") { $sobrou += "registro do link" }
+          $progs = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' | ForEach-Object { (Get-ItemProperty $_.PSPath).DisplayName } | Where-Object { $_ -like 'FortiLink*' -or $_ -like 'RustDesk*' }
+          foreach ($x in $progs) { $sobrou += "programa instalado: $x" }
+          netsh advfirewall firewall show rule name="FortiLinkRemoto Service" | Out-Null; if ($LASTEXITCODE -eq 0) { $sobrou += "regra do firewall" }
+          foreach ($d in @("$env:APPDATA\FortiLinkRemoto", "C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\FortiLinkRemoto")) { if (Test-Path $d) { Write-Host "AVISO: ficou a pasta de dados $d" } }
+          if ($sobrou.Count) { $sobrou | ForEach-Object { Write-Host "SOBROU: $_" }; throw "a desinstalação deixou coisas no computador" }
+          Write-Host "Desinstalação: programa, serviço, link e firewall removidos."
+          exit 0
