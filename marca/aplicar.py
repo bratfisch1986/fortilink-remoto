@@ -35,7 +35,7 @@ trocar(cfg, 'RwLock::new("RustDesk".to_owned())', f'RwLock::new("{NOME_INTERNO}"
 servidor = os.environ.get("FL_SERVIDOR", "").strip()
 chave = os.environ.get("FL_CHAVE", "").strip()
 if servidor or chave:
-    if not re.fullmatch(r"[A-Za-z0-9.-]{4,120}", servidor):
+    if not re.fullmatch(r"[A-Za-z0-9.-]{4,120}(:[0-9]{2,5})?", servidor):
         sys.exit("ERRO: FL_SERVIDOR inválido")
     if not re.fullmatch(r"[A-Za-z0-9+/=]{40,60}", chave):
         sys.exit("ERRO: FL_CHAVE inválida")
