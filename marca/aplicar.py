@@ -271,6 +271,88 @@ trocar("src/core_main.rs", """        } else if args[0] == "--get-id" {""", """ 
             return None;
         } else if args[0] == "--get-id" {""")
 
+# 6c) olhinho (mostrar/esconder) em todos os campos de senha (regra do Allan)
+dg = "flutter/lib/common/widgets/dialog.dart"
+trocar(dg, """              TextField(
+                decoration: InputDecoration(
+                  labelText: title,
+                  hintText: hintText,
+                  prefixIcon: prefixIcon,
+                  suffixIcon: suffixIcon,
+                  helperText: helperText,
+                  helperMaxLines: 8,
+                ),
+                controller: controller,
+                focusNode: focusNode,
+                autofocus: true,
+                obscureText: obscureText,
+                keyboardType: keyboardType,
+                inputFormatters: inputFormatters,
+                maxLength: maxLength,
+              ),""", """              StatefulBuilder(builder: (context, setLocal) {
+                final temOlho = obscureText && suffixIcon == null;
+                final oculto = obscureText && !_flMostrarSenha.contains(controller);
+                return TextField(
+                  decoration: InputDecoration(
+                    labelText: title,
+                    hintText: hintText,
+                    prefixIcon: prefixIcon,
+                    suffixIcon: temOlho
+                        ? IconButton(
+                            tooltip: oculto ? 'Mostrar' : 'Esconder',
+                            icon: Icon(oculto
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined),
+                            onPressed: () => setLocal(() {
+                              if (oculto) {
+                                _flMostrarSenha.add(controller);
+                              } else {
+                                _flMostrarSenha.remove(controller);
+                              }
+                            }),
+                          )
+                        : suffixIcon,
+                    helperText: helperText,
+                    helperMaxLines: 8,
+                  ),
+                  controller: controller,
+                  focusNode: focusNode,
+                  autofocus: true,
+                  obscureText: oculto,
+                  keyboardType: keyboardType,
+                  inputFormatters: inputFormatters,
+                  maxLength: maxLength,
+                );
+              }),""")
+trocar(dg, "class DialogTextField extends StatelessWidget {", "final Set<TextEditingController> _flMostrarSenha = {};\n\nclass DialogTextField extends StatelessWidget {")
+
+hp = "flutter/lib/desktop/pages/desktop_home_page.dart"
+trocar(hp, """      statusTip.isNotEmpty && !isDesktop && !isWebDesktop;
+
+  gFFI.dialogManager.show((setState, close, context) {""", """      statusTip.isNotEmpty && !isDesktop && !isWebDesktop;
+  var flMostrar = false;
+
+  gFFI.dialogManager.show((setState, close, context) {
+    Widget flOlho() => IconButton(
+          tooltip: flMostrar ? 'Esconder' : 'Mostrar',
+          icon: Icon(flMostrar
+              ? Icons.visibility_off_outlined
+              : Icons.visibility_outlined),
+          onPressed: () => setState(() => flMostrar = !flMostrar),
+        );""")
+trocar(hp, """                    obscureText: true,
+                    decoration: InputDecoration(
+                        labelText: translate('Password'),""", """                    obscureText: !flMostrar,
+                    decoration: InputDecoration(
+                        suffixIcon: flOlho(),
+                        labelText: translate('Password'),""")
+trocar(hp, """                    obscureText: true,
+                    decoration: InputDecoration(
+                        labelText: translate('Confirmation'),""", """                    obscureText: !flMostrar,
+                    decoration: InputDecoration(
+                        suffixIcon: flOlho(),
+                        labelText: translate('Confirmation'),""")
+
 # 7) desinstalar apaga também as pastas de dados (instalar por cima continua mantendo)
 wr = "src/platform/windows.rs"
 trocar(wr, """    run_cmds(get_uninstall(kill_self, true)?, true, "uninstall")""", r"""    let fl_dados = format!(
