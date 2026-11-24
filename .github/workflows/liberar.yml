@@ -1,0 +1,37 @@
+name: Liberar instalador para download
+
+# Pega o instalador de uma geração já testada em Windows limpo, confere a impressão digital
+# e coloca em Releases (endereço fixo usado pela interfonia e pelo VPS). Autorizado pelo Allan em 24/11/2026.
+on:
+  push:
+    branches: [construcao]
+    paths: [".github/workflows/liberar.yml"]
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  GERACAO: "45384710131"
+  ETIQUETA: "fl-1.5.3-1"
+  SHA256: "c7375b125544d57ac2d4847c72e4362c318f009ecec93eeb8b76c8b8fca328ec"
+
+jobs:
+  liberar:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: FortiLinkRemoto-windows
+          path: ./saida
+          run-id: ${{ env.GERACAO }}
+          github-token: ${{ github.token }}
+      - name: Conferir a impressão digital e publicar em Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "${SHA256}  saida/FortiLinkRemoto-1.5.3.exe" | sha256sum -c -
+          gh release create "$ETIQUETA" saida/FortiLinkRemoto-1.5.3.exe \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "FortiLink Remoto 1.5.3 (FortiLink 1)" \
+            --notes "Programa de acesso remoto da FortiLink, feito a partir do RustDesk 1.5.3 (AGPL-3.0). Não é produto oficial do RustDesk. SHA-256: ${SHA256}"
