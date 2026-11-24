@@ -175,6 +175,10 @@ pub fn main_fl_import_peers(path: String) -> String {
             if !sistema.is_empty() {
                 c.info.platform = sistema;
             }
+            // sem o sistema preenchido o programa descarta o computador da lista
+            if c.info.platform.is_empty() {
+                c.info.platform = "Windows".to_owned();
+            }
             c.store(&id);
             n += 1;
         }
