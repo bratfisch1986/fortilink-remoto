@@ -21,8 +21,9 @@ env:
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
-  FL_SERVIDOR: ${{ vars.FL_SERVIDOR }}
-  FL_CHAVE: ${{ vars.FL_CHAVE }}
+  # servidor próprio do FortiLink Remoto (KVM 2, portas 21125-21127). A chave é pública, não é segredo.
+  FL_SERVIDOR: "remoto.fortilinkseg.com.br:21126"
+  FL_CHAVE: "WNgWXbWOYU3072f9ZXWfK6MmFi8kXB3iNs1BgWgOUKM="
 
 jobs:
   ponte:
@@ -157,6 +158,11 @@ jobs:
           vcpkgDirectory: C:\vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
+      - name: Guardar as bibliotecas prontas (vcpkg) entre gerações
+        uses: actions/cache@v4
+        with:
+          path: C:\vcpkg\installed
+          key: vcpkg-instalado-${{ env.VCPKG_COMMIT_ID }}-${{ hashFiles('vcpkg.json') }}
       - name: Dependências (vcpkg)
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static

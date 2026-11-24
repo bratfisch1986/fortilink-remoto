@@ -64,6 +64,13 @@ jobs:
           Write-Host "Serviço: $($svc.Name) ($($svc.Status))"
           if (Get-Service RustDesk -ErrorAction SilentlyContinue) { throw "sobrou serviço com o nome RustDesk" }
           "INST=$inst" | Out-File -Append $env:GITHUB_ENV
+      - name: Servidor próprio gravado no programa
+        shell: pwsh
+        run: |
+          $bin = [IO.File]::ReadAllBytes($env:INST); $txt = [Text.Encoding]::ASCII.GetString($bin)
+          if ($txt -notmatch 'remoto\.fortilinkseg\.com\.br:21126') { throw "o endereço do servidor próprio não está gravado no programa" }
+          if ($txt -notmatch 'WNgWXbWOYU3072f9ZXWfK6MmFi8kXB3iNs1BgWgOUKM=') { throw "a chave do servidor próprio não está gravada no programa" }
+          Write-Host "Servidor próprio gravado: remoto.fortilinkseg.com.br:21126 com a chave do nosso servidor."
       - name: Configurar e ler de volta
         shell: pwsh
         run: |
